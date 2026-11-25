@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Job Scheduling System</title>
+<style>
+:root{--bg:#f4f4f4;--surface:#fff;--text:#222;--muted:#666;--border:#bbb;--accent:#1f5fa8;--accent-t:#fff;--bad:#c00000;--ok:#1a7f1a;--grid:#e3e3e3;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#181a1d;--surface:#22252a;--text:#e8e8e8;--muted:#a0a0a0;--border:#4a4f57;--accent:#2f6fb5;--bad:#ff7b7b;--ok:#6fd07a;--grid:#32363c;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#181a1d;--surface:#22252a;--text:#e8e8e8;--muted:#a0a0a0;--border:#4a4f57;--accent:#2f6fb5;--bad:#ff7b7b;--ok:#6fd07a;--grid:#32363c;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Arial,Helvetica,sans-serif}
+header{background:var(--accent);color:var(--accent-t);padding:14px 20px;border-bottom:3px solid rgba(0,0,0,.25)}
+h1{margin:0;font-size:22px}header p{margin:3px 0 0;font-size:13px;opacity:.9}
+.wrap{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;max-width:1200px;margin:0 auto;padding:16px}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);padding:12px 14px;margin-bottom:16px}
+h2{font-size:16px;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+label{display:block;font-size:13px;margin:8px 0 3px;font-weight:bold}
+input,select,button{font:inherit;color:inherit}
+input,select{width:100%;padding:5px 7px;border:1px solid var(--border);background:var(--surface)}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.set{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+button{cursor:pointer;border:1px solid var(--border);background:var(--grid);padding:5px 12px;margin:10px 6px 0 0}
+button.primary{background:var(--accent);color:var(--accent-t);border-color:var(--accent)}
+button.link{border:0;background:none;color:var(--accent);padding:0 4px;margin:0;text-decoration:underline}
+button.link.del{color:var(--bad)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;background:var(--grid)}th,td{padding:5px 7px;border:1px solid var(--border)}
+.tw{overflow-x:auto}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.metric{background:var(--surface);border:1px solid var(--border);padding:8px 10px}
+.metric span{display:block;color:var(--muted);font-size:12px}.metric strong{font-size:20px}
+.err{color:var(--bad);margin-top:8px}.muted{color:var(--muted);font-size:13px;margin:8px 0 0}.empty{color:var(--muted);padding:10px}
+.scroll{overflow-x:auto;border:1px solid var(--border);background:var(--bg);padding:10px 12px}
+.gantt{position:relative}
+.lane{position:relative;height:46px}
+.blk{position:absolute;top:0;height:46px;border:1px solid rgba(0,0,0,.45);color:#111;font-weight:bold;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap}
+.blk.idle{background:repeating-linear-gradient(45deg,var(--grid),var(--grid) 6px,var(--surface) 6px,var(--surface) 12px);color:var(--muted);font-weight:normal}
+.times{position:relative;height:24px;font-size:12px}
+.times span{position:absolute;top:4px;transform:translateX(-50%)}
+.avg td{font-weight:bold;background:var(--grid)}
+.best td{background:color-mix(in srgb,var(--ok) 15%,transparent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Smart Job Scheduling System</h1>
+  <p>Mini project: CPU-style job scheduling with FCFS, SJF, SRTF, Priority and Round Robin.</p>
+</header>
+<div class="wrap">
+<aside>
+  <div class="card">
+    <h2 id="formTitle">Add a job</h2>
+    <form id="f" autocomplete="off">
+      <label for="name">Job name</label><input id="name" maxlength="30" placeholder="e.g. P5">
+      <div class="row">
+        <div><label for="at">Arrival</label><input id="at" type="number" min="0" step="0.5" value="0"></div>
+        <div><label for="bt">Burst</label><input id="bt" type="number" min="0.5" step="0.5" value="4"></div>
+        <div><label for="pri">Priority</label><input id="pri" type="number" min="1" step="1" value="3"></div>
+      </div>
+      <p class="muted">Arrival = when the job enters the queue. Burst = time it needs on the CPU. Priority: 1 is the highest.</p>
+      <button class="primary" type="submit" id="saveBtn">Add job</button><button type="button" id="cancelBtn" hidden>Cancel edit</button><button type="button" id="clearForm">Clear form</button>
+      <div class="err" id="error"></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Jobs (<span id="count">0</span>)</h2>
+    <div class="tw" id="list"></div>
+    <button id="sample">Load sample jobs</button><button id="clear">Clear all</button>
+  </div>
+</aside>
+<main>
+  <div class="card">
+    <h2>Scheduling algorithm</h2>
+    <div class="set">
+      <div><label for="algo" style="margin-top:0">Algorithm</label><select id="algo"></select></div>
+      <div id="qbox" hidden><label for="q" style="margin-top:0">Time quantum</label><input id="q" type="number" min="0.5" step="0.5" value="2"></div>
+    </div>
+    <p class="muted" id="desc"></p>
+  </div>
+  <div class="metrics" id="metrics"></div>
+  <div class="card"><h2>Gantt chart</h2><div class="scroll"><div class="gantt" id="gantt"></div></div></div>
+  <div class="card"><h2>Results</h2><div class="tw" id="results"></div>
+    <p class="muted">Turnaround = Completion − Arrival. Waiting = Turnaround − Burst. Response = First start − Arrival.</p></div>
+  <div class="card"><h2>Algorithm comparison (averages)</h2><div class="tw" id="compare"></div></div>
+</main>
+</div>
+<script>
+const KEY = "cpu-job-scheduler-v1";
+const ALGOS = {
+  fcfs: ["FCFS (First Come, First Served)", "Runs jobs in the order they arrive. A running job is never interrupted."],
+  sjf: ["SJF (Shortest Job First)", "When the CPU is free, it picks the waiting job with the smallest burst time. Non-preemptive."],
+  srtf: ["SRTF (Shortest Remaining Time First)", "Preemptive SJF. If a new job needs less time than what is left of the running job, it takes over the CPU."],
+  priority: ["Priority (non-preemptive)", "When the CPU is free, it picks the waiting job with the highest priority (lowest number)."],
+  rr: ["Round Robin", "Each job gets the CPU for one time quantum, then goes to the back of the queue."]
+};
+const COLORS = ["#9fd4f0", "#a6e3a1", "#ffe08a", "#ff9f9f", "#c7b8f5", "#f7b6e0", "#a8e6e0", "#f5c48f"];
+let jobs = [], nextId = 1, algo = "fcfs", quantum = 2, editing = null, clearTimer = null;
+const $ = s => document.querySelector(s);
+const f = x => +(+x).toFixed(2);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function save() { try { localStorage.setItem(KEY, JSON.stringify({jobs, nextId, algo, quantum})); } catch (e) {} }
+function loadSample() {
+  jobs = [["P1", 0, 8, 3], ["P2", 1, 4, 1], ["P3", 2, 9, 4], ["P4", 3, 5, 2]].map(([name, at, bt, pri], i) => ({id:i + 1, name, at, bt, pri}));
+  nextId = 5;
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (d && Array.isArray(d.jobs)) { jobs = d.jobs; nextId = d.nextId || jobs.length + 1; algo = ALGOS[d.algo] ? d.algo : "fcfs"; quantum = d.quantum || 2; return; }
+  } catch (e) {}
+  loadSample();
+}
+
+/* The scheduler: simulates one CPU and returns the Gantt segments and statistics. */
+function simulate(a, quantum) {
+  const P = jobs.map((j, i) => ({...j, i, rem:j.bt, first:null, ct:null}));
+  const seg = [];
+  const idle = (s, e) => seg.push({idle:true, s, e});
+  const run = (p, s, d) => {           // give the CPU to job p from time s for d units
+    if (p.first === null) p.first = s;
+    p.rem -= d;
+    const last = seg[seg.length - 1];
+    if (last && last.id === p.id && Math.abs(last.e - s) < 1e-9) last.e = s + d;
+    else seg.push({id:p.id, name:p.name, s, e:s + d, idx:p.i});
+    if (p.rem < 1e-9) { p.rem = 0; p.ct = s + d; }
+    return s + d;
+  };
+  let t = 0;
+  if (a === "rr") {
+    const Q = [], seen = new Set();
+    const admit = time => P.filter(p => p.at <= time && !seen.has(p.i)).sort((x, y) => x.at - y.at || x.i - y.i).forEach(p => { seen.add(p.i); Q.push(p); });
+    while (P.some(p => p.rem > 0)) {
+      admit(t);
+      if (!Q.length) { const nx = Math.min(...P.filter(p => !seen.has(p.i)).map(p => p.at)); idle(t, nx); t = nx; continue; }
+      const p = Q.shift();
+      t = run(p, t, Math.min(p.rem, quantum));
+      admit(t);                         // jobs that arrived meanwhile queue up before p
+      if (p.rem > 0) Q.push(p);
+    }
+  } else {
+    const keys = {fcfs:p => [p.at, p.i], sjf:p => [p.rem, p.at, p.i], srtf:p => [p.rem, p.at, p.i], priority:p => [p.pri, p.at, p.i]};
+    const cmp = (x, y) => { const A = keys[a](x), B = keys[a](y); for (let k = 0; k < A.length; k++) if (A[k] !== B[k]) return A[k] - B[k]; return 0; };
+    while (P.some(p => p.rem > 0)) {
+      const ready = P.filter(p => p.at <= t && p.rem > 0);
+      if (!ready.length) { const nx = Math.min(...P.filter(p => p.rem > 0).map(p => p.at)); idle(t, nx); t = nx; continue; }
+      const p = ready.sort(cmp)[0];
+      let d = p.rem;                    // non-preemptive: run to the end
+      if (a === "srtf") {               // preemptive: stop at the next arrival and choose again
+        const nx = P.filter(x => x.at > t && x.rem > 0).map(x => x.at);
+        if (nx.length) d = Math.min(d, Math.min(...nx) - t);
+      }
+      t = run(p, t, d);
+    }
+  }
+  const rows = P.map(p => ({...p, tat:p.ct - p.at, wt:p.ct - p.at - p.bt, rt:p.first - p.at}));
+  const n = rows.length, avg = k => rows.reduce((s, r) => s + r[k], 0) / n, total = Math.max(...rows.map(r => r.ct));
+  return {seg, rows, total, m:{wt:avg("wt"), tat:avg("tat"), rt:avg("rt"), util:100 * rows.reduce((s, r) => s + r.bt, 0) / total, pre:seg.filter(s => !s.idle).length - n}};
+}
+
+function render() {
+  save();
+  $("#count").textContent = jobs.length;
+  $("#desc").textContent = ALGOS[algo][1];
+  $("#qbox").hidden = algo !== "rr";
+  $("#list").innerHTML = jobs.length
+    ? `<table><tr><th>Job</th><th>AT</th><th>BT</th><th>Pri</th><th></th></tr>` + jobs.map(j => `<tr><td>${esc(j.name)}</td><td>${f(j.at)}</td><td>${f(j.bt)}</td><td>${j.pri}</td><td><button class="link" data-edit="${j.id}">Edit</button><button class="link del" data-del="${j.id}">Delete</button></td></tr>`).join("") + `</table><p class="muted">AT = arrival time, BT = burst time, Pri = priority.</p>`
+    : '<p class="empty">No jobs yet. Add one or load the sample jobs.</p>';
+  if (!jobs.length) {
+    $("#metrics").innerHTML = ""; $("#results").innerHTML = ""; $("#compare").innerHTML = "";
+    $("#gantt").innerHTML = '<p class="empty">The Gantt chart appears here once you add jobs.</p>'; $("#gantt").style.width = "auto"; return;
+  }
+  const r = simulate(algo, quantum), m = r.m;
+  $("#metrics").innerHTML = [["Avg waiting time", f(m.wt)], ["Avg turnaround time", f(m.tat)], ["Avg response time", f(m.rt)], ["Total time", f(r.total)], ["CPU utilization", f(m.util) + "%"], ["Preemptions", m.pre]]
+    .map(([l, v]) => `<div class="metric"><span>${l}</span><strong>${v}</strong></div>`).join("");
+
+  // Gantt chart: one block per CPU burst, times shown under each boundary
+  const ph = Math.max(24, Math.min(70, 820 / r.total)), W = Math.ceil(r.total * ph) + 30;
+  const blocks = r.seg.map(s => `<div class="blk${s.idle ? " idle" : ""}" style="left:${s.s * ph}px;width:${(s.e - s.s) * ph}px;${s.idle ? "" : "background:" + COLORS[s.idx % COLORS.length]}" title="${s.idle ? "Idle" : esc(s.name)}: ${f(s.s)} to ${f(s.e)}">${s.idle ? "Idle" : esc(s.name)}</div>`).join("");
+  const times = [...new Set(r.seg.flatMap(s => [s.s, s.e]))].map(t => `<span style="left:${t * ph}px">${f(t)}</span>`).join("");
+  $("#gantt").style.width = W + "px";
+  $("#gantt").innerHTML = `<div class="lane">${blocks}</div><div class="times">${times}</div>`;
+
+  $("#results").innerHTML = `<table><tr><th>Job</th><th>Arrival</th><th>Burst</th><th>Completion</th><th>Turnaround</th><th>Waiting</th><th>Response</th></tr>` +
+    r.rows.map(x => `<tr><td>${esc(x.name)}</td><td>${f(x.at)}</td><td>${f(x.bt)}</td><td>${f(x.ct)}</td><td>${f(x.tat)}</td><td>${f(x.wt)}</td><td>${f(x.rt)}</td></tr>`).join("") +
+    `<tr class="avg"><td colspan="4">Average</td><td>${f(m.tat)}</td><td>${f(m.wt)}</td><td>${f(m.rt)}</td></tr></table>`;
+
+  const all = Object.keys(ALGOS).map(k => ({k, m:simulate(k, quantum).m}));
+  const best = [...all].sort((x, y) => x.m.wt - y.m.wt || x.m.tat - y.m.tat)[0].k;
+  $("#compare").innerHTML = `<table><tr><th>Algorithm</th><th>Avg waiting</th><th>Avg turnaround</th><th>Avg response</th><th>Preemptions</th></tr>` +
+    all.map(({k, m}) => `<tr class="${k === best ? "best" : ""}"><td>${ALGOS[k][0]}${k === best ? " (lowest waiting)" : ""}</td><td>${f(m.wt)}</td><td>${f(m.tat)}</td><td>${f(m.rt)}</td><td>${m.pre}</td></tr>`).join("") + "</table>";
+}
+
+function resetForm() {
+  editing = null; $("#f").reset(); $("#error").textContent = "";
+  $("#formTitle").textContent = "Add a job"; $("#saveBtn").textContent = "Add job"; $("#cancelBtn").hidden = true;
+}
+$("#f").addEventListener("submit", e => {
+  e.preventDefault();
+  const at = parseFloat($("#at").value), bt = parseFloat($("#bt").value), pri = parseInt($("#pri").value);
+  if (isNaN(at) || at < 0) { $("#error").textContent = "Arrival time must be 0 or more."; return; }
+  if (isNaN(bt) || bt <= 0) { $("#error").textContent = "Burst time must be greater than 0."; return; }
+  if (isNaN(pri) || pri < 1) { $("#error").textContent = "Priority must be 1 or more."; return; }
+  const name = $("#name").value.trim() || "P" + nextId;
+  if (editing) Object.assign(jobs.find(j => j.id === editing), {name, at, bt, pri});
+  else jobs.push({id:nextId++, name, at, bt, pri});
+  resetForm(); render();
+});
+$("#cancelBtn").onclick = () => { resetForm(); render(); };
+$("#clearForm").onclick = () => { resetForm(); render(); };
+$("#list").addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.del) { jobs = jobs.filter(j => j.id !== +d.del); if (editing === +d.del) resetForm(); render(); }
+  if (d.edit) {
+    const j = jobs.find(x => x.id === +d.edit); editing = j.id;
+    $("#name").value = j.name; $("#at").value = j.at; $("#bt").value = j.bt; $("#pri").value = j.pri; $("#error").textContent = "";
+    $("#formTitle").textContent = "Edit job"; $("#saveBtn").textContent = "Save changes"; $("#cancelBtn").hidden = false; $("#name").focus();
+  }
+});
+$("#sample").onclick = () => { loadSample(); resetForm(); render(); };
+$("#clear").onclick = () => {          // two clicks to confirm (pop-up dialogs do not work in published pages)
+  const b = $("#clear");
+  if (!jobs.length) return;
+  if (!clearTimer) { b.textContent = "Click again to confirm"; clearTimer = setTimeout(() => { clearTimer = null; b.textContent = "Clear all"; }, 4000); return; }
+  clearTimeout(clearTimer); clearTimer = null; b.textContent = "Clear all";
+  jobs = []; nextId = 1; resetForm(); render();
+};
+$("#algo").innerHTML = Object.entries(ALGOS).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join("");
+$("#algo").onchange = e => { algo = e.target.value; render(); };
+$("#q").onchange = e => { quantum = Math.max(0.5, parseFloat(e.target.value) || 2); e.target.value = quantum; render(); };
+load();
+$("#algo").value = algo; $("#q").value = quantum;
+render();
+</script>
+</body>
+</html>
